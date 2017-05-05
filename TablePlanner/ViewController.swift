@@ -9,97 +9,197 @@
 import UIKit
 import SpriteKit
 
+enum VCState {
+    case floor
+    case tables
+    case table
+}
+
 class ViewController: UIViewController {
     
-    var scene: EventScene!
+    var scene: SKScene!
+    
+    @IBOutlet weak var sceneView: SKView!
+    
+    var state : VCState = .floor {
+        didSet {
+            self.updateScene(oldValue)
+        }
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        scene = EventScene(size: CGSize(width: 500, height: 500))
-        scene.addFloor(CGSize(width: 500, height: 500))
-        scene.addTables()
         
-        if let skView = self.view as? SKView {
-            skView.presentScene(scene)
-        }
+        self.setupThirdEventScene()
+       
+        sceneView.presentScene(scene)
         
         let pinchGestureRecognizer = UIPinchGestureRecognizer(target: self, action: #selector(pinchGestureRecognized(_:)))
+        pinchGestureRecognizer.delegate = self
         view.addGestureRecognizer(pinchGestureRecognizer)
+        
+        let rotateGestureRecognizer = UIRotationGestureRecognizer(target: self, action: #selector(roatationGestureRecognized(_:)))
+        rotateGestureRecognizer.delegate = self
+        view.addGestureRecognizer(rotateGestureRecognizer)
+    }
+    
+    
+    @IBAction func showFloor(_ sender: Any) {
+        self.state = .floor
+    }
+    
+    @IBAction func showTables(_ sender: Any) {
+        self.state = .tables
+    }
+    
+    @IBAction func showTable(_ sender: Any) {
+        self.state = .table
+    }
+    
+    func updateScene(_ previousState: VCState) {
+        guard self.state != previousState else {
+            return
+        }
+        
+        switch state {
+        case .floor:
+            self.setupThirdEventScene()
+        case .tables:
+            self.setupEventScene()
+        case .table:
+            self.setupSecondEventScene()
+        }
+        
+        sceneView.presentScene(scene)
+    }
+    
+    func setupEventScene() {
+        let eventScene = FirstEventScene(size: CGSize(width: 500, height: 500))
+        eventScene.addFloor(CGSize(width: 500, height: 500))
+        eventScene.floorNode.addChild(eventScene.createTable())
+        eventScene.addUI()
+        self.scene = eventScene
+    }
+    
+    func setupSecondEventScene() {
+        let eventScene = SecondEventScene(size: CGSize(width: 500, height: 500))
+        eventScene.setup()
+        self.scene = eventScene
+    }
+    
+    func setupThirdEventScene() {
+        let eventScene = ThirdEventScene(size: CGSize(width: 500, height: 500))
+        eventScene.addFloor(CGSize(width: 500, height: 500))
+        //eventScene.floorNode.addChild(eventScene.createTable())
+        eventScene.addUI()
+        self.scene = eventScene
     }
     
     func pinchGestureRecognized(_ gesture: UIPinchGestureRecognizer) {
-        self.scene.pinchByScale(gesture.scale)
+        if state != .floor {
+            self.scene.pinchByScale(gesture.scale)  
+        }
+        
+    }
+    
+    func roatationGestureRecognized(_ gesture: UIRotationGestureRecognizer) {
+        self.scene.rotateWith(gesture.rotation)
     }
 
 }
 
-class EventScene: SKScene {
-    
-    var currentlyDraggedNode: SKNode?
-    
-    var currentScale: CGFloat = 1.0
-    
-    var floorNode: SKShapeNode!
-    
-    func addFloor(_ size: CGSize) {
-        self.floorNode = SKShapeNode(rectOf: CGSize(width: 500, height: 500))
-        self.floorNode.fillColor = .white
-        self.floorNode.position = CGPoint(x: 250, y: 250)
-        
-        self.addChild(self.floorNode)
-        
+extension ViewController: UIGestureRecognizerDelegate {
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        return true
     }
-    
-    func addTables() {
-        let tableNode = SKShapeNode(rectOf: CGSize(width: 50, height: 50))
-        tableNode.fillColor = .brown
-        tableNode.position = CGPoint(x: 430, y: 20)
-        
-        self.floorNode.addChild(tableNode)
-        
-        
-    }
-    
-    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        
-        if let firstTouch = touches.first {
-            let currNode = self.atPoint(firstTouch.location(in: self))
-            if currNode != self, currNode != self.floorNode {
-               self.currentlyDraggedNode = currNode
-            }
-          
-        }
-    }
-    
-    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
-        if let firstTouch = touches.first,
-            let currentNode = self.currentlyDraggedNode {
-            currentNode.position = firstTouch.location(in: self.floorNode)
-        }
-    }
-    
-    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
-        self.currentlyDraggedNode = nil
-    }
-    
-    func pinchByScale(_ scale: CGFloat) {
-        if scale > currentScale {
-            currentScale = scale
-            if(self.size.height < 800) {
-                let zoomIn = SKAction.scale(by: 1.05, duration:0)
-                self.floorNode.run(zoomIn)
-            }
-        }
-        if scale < currentScale {
-            currentScale = scale
-            if(self.size.height > 200) {
-                let zoomOut = SKAction.scale(by: 0.95, duration:0)
-                self.floorNode.run(zoomOut)
-            }
-        }
-    }
-    
 }
+
+extension SKScene {
+    func pinchByScale(_ scale: CGFloat) { }
+    
+    func rotateWith(_ rotation: CGFloat) { }
+}
+
+enum NodeType : String {
+    case floor
+    case table
+    case patron
+    case emptySeat
+    case ui
+}
+
+struct PhysicsCategory {
+    static let None         : UInt32 = 0
+    static let Patron       : UInt32 = 0b1       // 1
+    static let Table        : UInt32 = 0b10      // 2
+    static let Floor        : UInt32 = 0b100
+    static let EmptySeat    : UInt32 = 0b1000
+}
+
+
+
+
+class Grid:SKSpriteNode {
+    var rows:Int!
+    var cols:Int!
+    var blockSize:CGFloat!
+    
+    convenience init?(blockSize:CGFloat,rows:Int,cols:Int) {
+        guard let texture = Grid.gridTexture(blockSize: blockSize,rows: rows, cols:cols) else {
+            return nil
+        }
+        self.init(texture: texture, color:SKColor.clear, size: texture.size())
+        self.blockSize = blockSize
+        self.rows = rows
+        self.cols = cols
+    }
+    
+    class func gridTexture(blockSize:CGFloat,rows:Int,cols:Int) -> SKTexture? {
+        // Add 1 to the height and width to ensure the borders are within the sprite
+        let size = CGSize(width: CGFloat(cols)*blockSize+1.0, height: CGFloat(rows)*blockSize+1.0)
+        UIGraphicsBeginImageContext(size)
+        
+        guard let context = UIGraphicsGetCurrentContext() else {
+            return nil
+        }
+        let bezierPath = UIBezierPath()
+        let offset:CGFloat = 0.5
+        // Draw vertical lines
+        for i in 0...cols {
+            let x = CGFloat(i)*blockSize + offset
+            bezierPath.move(to: CGPoint(x: x, y: 0))
+            bezierPath.addLine(to: CGPoint(x: x, y: size.height))
+        }
+        // Draw horizontal lines
+        for i in 0...rows {
+            let y = CGFloat(i)*blockSize + offset
+            bezierPath.move(to: CGPoint(x: 0, y: y))
+            bezierPath.addLine(to: CGPoint(x: size.width, y: y))
+        }
+        SKColor.orange.setStroke()
+        bezierPath.lineWidth = 1.0
+        bezierPath.stroke()
+        context.addPath(bezierPath.cgPath)
+        let image = UIGraphicsGetImageFromCurrentImageContext()
+        UIGraphicsEndImageContext()
+        
+        return SKTexture(image: image!)
+    }
+    
+    func gridPosition(row:Int, col:Int) -> CGPoint {
+        let offset = blockSize / 2.0 + 0.5
+        let x = CGFloat(col) * blockSize - (blockSize * CGFloat(cols)) / 2.0 + offset
+        let y = CGFloat(rows - row - 1) * blockSize - (blockSize * CGFloat(rows)) / 2.0 + offset
+        return CGPoint(x:x, y:y)
+    }
+}
+
+
+
+
+
+
+
 
 
 
